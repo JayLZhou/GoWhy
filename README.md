@@ -177,7 +177,7 @@ Every causal answer has the same shape, and there is no way to get a bare number
 ## 🔬 How it works
 
 ```mermaid
-flowchart LR
+flowchart TD
     agent["Agent<br/>Claude Code · Cursor · your pipeline"]
     identify{"identify"}
     estimate["plan and estimate"]
