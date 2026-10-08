@@ -4,3 +4,10 @@ __pycache__/
 .DS_Store
 *.gowhy
 *.db
+
+# experiment outputs (live on the GPU machine)
+bench/store/
+bench/logs/
+bench/data/
+bench/tmp/
+*.lock

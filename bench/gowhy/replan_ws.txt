@@ -1,0 +1,3 @@
+# WebShop replan candidates, fixed before looking at half B
+UPDATE events SET action = replan:1 WHERE action = 'click[buy now]' SCOPE FIRST
+UPDATE events SET action = replan:1 WHERE verb = 'search' SCOPE FIRST

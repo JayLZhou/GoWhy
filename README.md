@@ -2,281 +2,207 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
-  <img src="assets/banner-light.svg" alt="GoWhy: the causal database for AI agents" width="720">
+  <img src="assets/banner-light.svg" alt="GoWhy" width="720">
 </picture>
 
-### The causal database for AI agents
+### What-if and how-to queries over LLM agent trajectories
 
-Your agent reads logs and guesses. GoWhy tells it what an action will **cause**,<br>
-and says so plainly when the data cannot answer.
+Ask *"what if the agent had done X?"* and *"what change would make it succeed more?"*,<br>
+and get answers that are unbiased, certified, and far cheaper than re-running the benchmark.
 
-[![status](https://img.shields.io/badge/status-alpha%20%C2%B7%20demo-orange)](#-status-and-roadmap)
-[![python](https://img.shields.io/badge/python-3.9%2B-3776ab)](#-quickstart)
-[![deps](https://img.shields.io/badge/deps-numpy%20%C2%B7%20pandas-informational)](#-quickstart)
-[![MCP](https://img.shields.io/badge/MCP-stdio%20server-7c3aed)](#-plug-it-into-your-agent)
-[![paper](https://img.shields.io/badge/arXiv-2608.07214-b31b1b)](https://arxiv.org/abs/2608.07214)
-[![license](https://img.shields.io/badge/license-Apache--2.0-green)](#license)
+[![status](https://img.shields.io/badge/status-research%20prototype-orange)](#status-and-roadmap)
+[![python](https://img.shields.io/badge/python-3.10-3776ab)](#quickstart)
+[![envs](https://img.shields.io/badge/envs-ALFWorld%20%C2%B7%20WebShop-informational)](#results)
+[![models](https://img.shields.io/badge/models-Qwen3--8B%20%C2%B7%20Qwen2.5--7B%20%C2%B7%20Llama--3.1--8B-7c3aed)](#results)
 
-[Demo](#-watch-an-agent-change-its-mind) ·
-[Why](#-why) ·
-[Quickstart](#-quickstart) ·
-[Tools](#-the-tools) ·
-[How it works](#-how-it-works) ·
-[Roadmap](#-status-and-roadmap) ·
-[Design doc](DESIGN.md)
+[Idea](#the-idea) ·
+[Results](#results) ·
+[How it works](#how-it-works) ·
+[Query language](#the-query-language) ·
+[Quickstart](#quickstart) ·
+[Layout](#repository-layout) ·
+[Lessons](#lessons-and-pitfalls) ·
+[Roadmap](#status-and-roadmap)
 
 </div>
 
 ---
 
-## ⚡ Watch an agent change its mind
+## The idea
 
-An agent wants to raise retention in customer segment B. Its plan is a discount. Before acting, it asks.
+Agent developers keep asking two questions:
 
-```console
-$ python3 demo/agent.py                                   # abridged; agent narration in comments
+- **What-if**: *if the agent had been stopped from picking up objects the task does not need, how much would its success rate change?*
+- **How-to**: *which change to the agent would raise its success rate the most?*
 
-> what_if(set={discount: 1}, outcomes=[retained, refund], where={segment: B})
+Today the answer is to change the agent and re-run the whole benchmark (an A/B test), which is slow, expensive, and easy to fool yourself with when you try many changes and keep the best-looking one.
 
-  retained  +0.030  95% CI [+0.022, +0.037]  IDENTIFIABLE  back-door, adjusted for {loyalty}
-            naive log contrast -0.069  (confounded, not a causal effect)
-  refund    +0.050  95% CI [+0.045, +0.055]  IDENTIFIABLE  back-door, no adjustment needed
-  query_id: q-0001
+GoWhy stores agent runs as a trajectory database and answers these questions as **queries**. A change is written as an update to the agent's future steps:
 
-# +3 points of retention, +5 points of refunds. Net negative: the agent drops the discount
-# and asks about free shipping instead.
-
-> what_if(set={free_shipping: 1}, outcomes=[retained, refund], where={segment: B})
-
-  retained  +0.019  95% CI [+0.011, +0.026]  IDENTIFIABLE  back-door, adjusted for {loyalty}
-  refund    no effect  IDENTIFIABLE  the graph has no causal path from free_shipping to refund
-  query_id: q-0002
-
-> apply_offer(segment=B, offer=free_shipping, query_id=q-0002)
-
-  applied free_shipping to segment B, authorized by q-0002
-  retained  realized +0.020   predicted +0.019 [+0.011, +0.026]   inside the interval
-
-# Next idea: proactive support calls. The logs cannot answer this one, and GoWhy says so.
-
-> what_if(set={support_call: 1}, outcomes=[retained], where={segment: B})
-
-  retained  NOT IDENTIFIABLE from orders_log: no point estimate is returned
-            reason: support_call and retained share a cause that orders_log does not record (frustration)
-            the data alone only say the effect lies in [-0.577, +0.423]
-            to answer it: start logging frustration
-            to answer it: randomize support_call on 4,448 customers per arm (+/-0.02 at 95%)
-            naive log contrast -0.092  (confounded, not a causal effect)
-
-> apply_offer(segment=B, offer=support_call, query_id=q-0003)
-
-  REFUSED: q-0003 could not identify the effect on ['retained']; acting on it would be a guess
+```sql
+WHATIF UPDATE events SET action = hint:2
+       WHERE verb = 'take' AND obj_match = 0     -- about to pick up something the task does not need
+       SCOPE ALL
+       GROUP BY task_type WITH n = 1
 ```
 
-Three things happened that a log dashboard, a rules file, or an LLM would not have done:
+GoWhy finds, in every stored game, the first step where the change would have fired, **forks the run there**, reuses the logged prefix, and replays only the suffix under the changed policy. Games where the change never fires need no replay at all: their outcome provably does not change.
 
-- **The sign flipped.** The raw logs say discounts *reduce* retention by 7 points, because discounts were handed to customers who were already leaving. The causal effect is +3. The simulated world's ground truth is +0.03.
-- **It refused to answer.** For support calls there is no number, only the reason, the bounds the data do support, and two concrete ways to make the question answerable.
-- **The action was gated and audited.** `apply_offer` runs only with the `query_id` of a what-if that asked about that exact action. `explain(q-0002)` reconstructs the estimand, the assumptions, the provenance of every edge it relied on, and the action it authorized.
+## Results
 
-## 🤔 Why
+All numbers come from this repository's code (`bench/`), run on ALFWorld and WebShop with the [AgentDebug](https://github.com/ulab-uiuc/AgentDebug) harness reproduced verbatim. Full log, including every negative result: [`bench/PLAN.md`](bench/PLAN.md).
 
-Agents leave logs, and everyone reads the logs to decide things: does retrieval help, is the deeper search worth it, which skill broke the run, should the agent have called that tool. But logs are not an experiment. The agent chose to call the tool *after* reading the task, so hard tasks are over-represented among tool calls and the tool gets blamed for the difficulty of the tasks it was handed. The standard fix is to replay trajectories under interventions, at one model run per counterfactual.
+**The answers are right.** In 6 head-to-head checks, the what-if estimate agrees with actually deploying the change and re-running from scratch (all |z| < 0.6):
 
-| You want to know | Today you use | What goes wrong | With GoWhy |
-|---|---|---|---|
-| Does this tool, depth, or skill actually help? | Read the logs, or replay | Logs are confounded; replay is expensive | Computed from the logs; replay only where it is provably needed |
-| Can this question be answered at all? | Nothing tells you | A library computes what you ask for; an LLM makes something up | `identify` rules first, and tells you what is missing |
-| How do I stop the agent doing something harmful? | Rules and prompt text | Rules do not know consequences | The agent asks `what_if` before it acts |
-| Whose fault was it? | LLM-as-judge, Shapley over logs | Neither is causal | `attribute` and `why` queries |
+| Model, environment, change | What-if | True deployment | z |
+| --- | --- | --- | --- |
+| Qwen2.5-7B, ALFWorld, reject invalid actions (smoke, 40 games) | +5.0 | +5.0 | 0.00 |
+| Qwen3-8B, ALFWorld, reject invalid actions | +0.5 | +0.2 | 0.13 |
+| Qwen2.5-7B, ALFWorld, reject invalid actions | +6.4 | +5.3 | 0.39 |
+| Qwen3-8B, ALFWorld, feedback on picking up a wrong object | +2.5 | +4.1 | −0.58 |
+| Qwen2.5-7B, ALFWorld, same feedback | +1.2 | +1.8 | −0.28 |
+| Llama-3.1-8B, ALFWorld, lenient action parsing | +16.3 | +17.4 | −0.40 |
 
-## ✨ What you get
+**They are cheap.** At equal precision (±1 point), what-if needs far fewer tokens than redeploying:
 
-**1. Does the tool work? Answered from your own logs, without replay.** &nbsp;`🚧 v0.1`<br>
-Point GoWhy at a trace directory. It tells you whether retrieving 3 or 10 documents is better and how much the new tool version helps, with confidence intervals. It also tells you that "should the agent call the tool at all" cannot be answered from logs, and how many replays of the no-tool arm would settle it. This is Theorems 1 and 2 of the *Replay-Free* paper as one command.
+| Model (share of games the change touches) | What-if, 1 replay per affected game | What-if, 8 replays | Redeploy |
+| --- | --- | --- | --- |
+| Qwen3-8B (22%) | 4M tokens | 21M | 103M |
+| Qwen2.5-7B (84%) | 48M | 188M | 103M |
 
-**2. `identify`: what cannot be known, and what is missing.** &nbsp;`✅ in the demo`<br>
-Ask a causal question and GoWhy first rules: identifiable, partially identifiable, or not. When it is not, you get the variable you failed to log, or the size of the experiment that would answer it. A "not identifiable" verdict is backed by the complete ID algorithm, not by "no adjustment set found".
+Picking the best of 27 candidate changes with one replay per affected game chose the held-out best every time (6/6 splits) for about 12k model calls, roughly 13x cheaper than deploying each candidate.
 
-**3. One line of MCP, and your agent asks before it acts.** &nbsp;`✅ in the demo`<br>
-`what_if`, `identify`, and `explain` as MCP tools for Claude Code, Cursor, or any MCP client, with `counterfactual` and `attribute` coming in v0.1. The server is plain standard-library Python.
+**They find fixes that hold on unseen tasks.** Each fix below was found from stored trajectories, screened by what-if, certified on fresh replays, and then confirmed by an A/B test on games or goals never used before:
 
-## 🚀 Quickstart
+| Model, environment | Fix | Result on unseen tasks |
+| --- | --- | --- |
+| Qwen3-8B, ALFWorld | feedback when about to pick up an object the task does not need | success +4.6 points (95% CI +1.3..+7.9), 274 games |
+| Qwen3-8B, ALFWorld | "replan" (restate task, actions so far, places visited) on wrong object or wrong receptacle | certified +5.6; unseen +4.0 (95% CI +0.2..+7.8) |
+| Qwen3-8B, WebShop | the store showed 65% of episodes never buy anything; replan when the agent keeps paging after step 8 | score 0.211 → 0.314, **+49%** (95% CI +0.068..+0.137), 200 goals |
+| Llama-3.1-8B, ALFWorld | 95.8% of actions were rejected by the harness (no `</action>`, quotes); lenient parsing | success 0.2% → **17.5%** (deployed) |
 
-You need Python 3.9+ with `numpy` and `pandas`. Nothing to install yet; run the demo from the repository.
+**And they tell you what does not work.** After certification, only about 5% of failures have a single decisive step, and 12 of 15 "decisive steps" flagged with 8 replays per cell were false positives. One LLM-proposed rule lowered success by 5 points; checking attributes right before "buy now" lowered WebShop score; broad replan triggers (every 10 steps, every revisit) did not help.
+
+## How it works
+
+The theory is written up in [`bench/THEORY.md`](bench/THEORY.md) (in Chinese).
+
+- **Model.** With a stateless harness, each step is a sample from the policy given the full prompt, so an episode is a Markov chain over prompts.
+- **Fork-point replay is unbiased.** Before the first step where the change fires, the changed and original policies behave identically, so the logged prefix is a valid sample under both. At the first firing step, the logged reply is the changed policy's first draw. Unaffected games contribute exactly zero. Per game, `D_i = a_i (V̂_i − Y_i)`; the estimate is the mean of `D_i` and its SE is `sd(D)/√N` (the deployment-basis SE).
+- **One replay per affected game is optimal.** `Var(D) = A + B/n`, where `A` is between-game variance and `B` is replay noise. Precision times cost is `A·n + B`, minimized at `n = 1`; sub-sampling games with 1/q weights is worse. The formula predicts observed SEs within 4%, and it explains why an earlier "materialize a fraction of the cells" index failed.
+- **Common random numbers.** Each sample gets a seed fixed by (game, replay, step, draw) and independent of the change, so different candidates are compared on coupled randomness. Same-seed action agreement is 0.97 versus 0.81 without seeds.
+- **Selection is guarded.** Candidates are mined on half A of the store and tested on half B; the winner is certified on fresh replays not used for selection, then A/B-tested on unseen tasks.
+
+## The query language
+
+```
+UPDATE events SET action = <effect> WHERE <predicate> SCOPE FIRST | ALL
+WHATIF <change> [GROUP BY <column>] WITH n = <replays> [DEPLOY m = <runs>]
+HOWTO  <file of changes> WITH n = <replays> CERTIFY n = <replays>
+```
+
+**Effects**
+
+| Effect | Meaning |
+| --- | --- |
+| `reject:N` | a verifier: resample up to N times while the reply still matches |
+| `hint:N[:ID]` | append a checker's feedback (generic, or message ID from `messages.json`) and resample |
+| `replan:N[:ID]` | stronger feedback: restate the task, actions so far and places visited, ask for the unfinished part, then resample |
+| `reparse` | harness fix: read the reply leniently and map it to the closest admissible action |
+| `swap:<model>` | from the firing step on, use another model |
+| `set:<action>` | force an action |
+| `unquote` | strip quotes from the action |
+
+**Predicate columns** (computed before the step runs, identically on logged events and during replay): `k`, `verb`, `valid`, `fmt_valid`, `quoted`, `repeat`, `revisit`, `obj_match`, `recep_match`, `n_invalid`, `task_type`, and the text columns `action`, `obs`, `task` (use `LIKE`). Predicates are evaluated by SQLite itself.
+
+## Quickstart
+
+The code expects one GPU machine with vLLM and conda. Paths default to the original setup; override with `GOWHY_ROOT`, `ALFWORLD_DATA`, `WEBSHOP_DIR`, `GOWHY_SERVERS`.
 
 ```bash
-python3 demo/agent.py
+# 1. environments (conda, Python 3.10)
+conda create -p envs/alfw python=3.10 && envs/alfw/bin/pip install "alfworld==0.4.2" "textworld==1.7.0" openai scikit-learn pandas pyarrow
+conda create -p envs/vllm011 python=3.10 && envs/vllm011/bin/pip install "vllm==0.11.0" "transformers==4.57.1"
+# WebShop (optional): Python 3.10 + openjdk 21 (conda-forge), pyserini 0.22.1, spacy 3.7.2 with
+# en_core_web_sm/lg 3.7.1, gym 0.24.0, selenium 4.2.0; data from the HF dataset YWZBrandon/webshop-data
+# (items_shuffle_1000.json, items_ins_v2_1000.json, items_human_ins.json), then build the Lucene index.
+
+# 2. serve the agent model, one replica per GPU (--generation-config vllm is required)
+MODEL=/path/to/Qwen3-8B NAME=qwen3-8b GPUS="0 1 2 3" PORT0=8041 bash bench/scripts/serve.sh
+
+# 3. check the harness reproduces AgentErrorBench prompts exactly (expects 100/100)
+cd bench && python harness/validate.py
+
+# 4. collect trajectories and build a store
+python harness/gen_fresh.py --n 300 --model Qwen3-8B-fresh --served qwen3-8b
+python gowhy/store.py fresh
+
+# 5. ask
+python gowhy/query.py --db store/fresh.db \
+  "WHATIF UPDATE events SET action = hint:2 WHERE verb = 'take' AND obj_match = 0 SCOPE ALL WITH n = 1 DEPLOY m = 2"
+
+# 6. find a fix: propose on half A, screen on half B, certify, then A/B on unseen games
+python gowhy/propose.py --db store/fresh.db --out gowhy/proposed.txt
+DB=store/fresh.db HALF=B N=4 CRN=1 bash scripts/run_candidates.sh gowhy/proposed.txt logs/pool
+python gowhy/optimizer.py --db store/fresh.db --cands gowhy/proposed.txt --half B
+python harness/ab.py --served qwen3-8b --m 2 --change "UPDATE events SET action = ... SCOPE ALL"
 ```
 
-```bash
-python3 -m pytest demo/test_demo.py -q
+For WebShop, add `--env webshop` to `gen_fresh.py`, build `store.py ws_q3`, use `--metric score`, and `--splits webshop_test` for the A/B test. `scripts/ws_pipeline.sh` and `scripts/llama2.sh` run whole pipelines end to end.
+
+## Repository layout
+
+```
+bench/                      current GoWhy (what-if / how-to over trajectories)
+  PLAN.md                   running log: every result, number and pitfall (Chinese)
+  THEORY.md                 estimator, unbiasedness, variance and the one-replay theorem (Chinese)
+  PAPER.md                  paper outline and evidence status (Chinese)
+  harness/
+    aeb.py                  AgentDebug ALFWorld harness, verbatim templates and parsing; Episode restore
+    webshop.py              AgentDebug WebShop harness
+    llm.py                  vLLM client: replicas, retries, per-request seeds
+    validate.py             exact prompt reproduction check on AgentErrorBench
+    gen_fresh.py            play new games and record full trajectories
+    replay.py, gate.py      fidelity check; decisive-step gate with certification
+    ab.py                   A/B test of a change on unseen games or goals
+  gowhy/
+    store.py                SQLite store: traces / events / runs, step attributes
+    changes.py              change language, predicates, effects, feedback messages
+    engine.py               fork-point replay engine
+    query.py                WHATIF / HOWTO, deployment-basis estimates, DEPLOY check
+    mine.py, propose.py     rule mining and LLM-proposed candidates (half A only)
+    optimizer.py            selection strategies compared on recorded replays
+    *.txt, messages.json    candidate sets and feedback messages used in the results
+  scripts/                  serve.sh, run_candidates.sh, ws_pipeline.sh, llama2.sh
+demo/, DESIGN.md, SPEC-*.md earlier prototype (see below)
 ```
 
-`agent.py` is a scripted agent, so no API key is needed. It talks to `demo/server.py` over real MCP stdio. The retail world behind it is simulated with known ground truth, which is how the test suite checks that the intervals cover the true effects.
+Trajectory stores, replays and model weights live on the experiment machine and are not in the repository.
 
-### 🔌 Plug it into your agent
+## Lessons and pitfalls
 
-Add the server to any MCP client:
+These cost real time; [`bench/PLAN.md`](bench/PLAN.md) has the details.
 
-```json
-{
-  "mcpServers": {
-    "gowhy": { "command": "python3", "args": ["/absolute/path/to/gowhy/demo/server.py"] }
-  }
-}
-```
+- **Selection bias is everywhere.** Mining and testing on the same games inflates effects; an A/B split that reused the hash that picked between duplicate runs inflated one effect from about +2.5 to +5.7. Keep mining, selection, certification and final testing on disjoint data, and salt every hash.
+- **Single logged outcomes are noisy baselines.** Deployment comparisons should average several base-policy runs per game.
+- **Uncertified "decisive steps" are mostly noise**: the steepest of many noisy drops is usually a winner's-curse artifact.
+- **Harness bugs look like agent failures.** Llama's 0% on ALFWorld was almost entirely a parsing problem.
+- **Engineering**: vLLM needs `--generation-config vllm`; a JVM (WebShop's Lucene) does not survive `fork`, so use `spawn`; give each process a random starting replica or the first one overloads; use WAL and retries when many processes write one SQLite file.
 
-Or in Claude Code:
+## Status and roadmap
 
-```bash
-claude mcp add gowhy -- python3 /absolute/path/to/gowhy/demo/server.py
-```
+Research prototype. Done: harness reproduction (100/100 exact prompts), what-if with deployment checks, the one-replay theory, LLM-proposed candidates, certified fixes on two environments and three models.
 
-Then give the agent a goal:
+Next:
 
-> You are an operations agent. Raise retention in segment B. The action you can take is `apply_offer`.
+- a third environment (τ-bench or ScienceWorld)
+- validate the best LLM-proposed ALFWorld fix (+5.5 on half B) on unseen games
+- related-work check and paper writing
 
-There are three ways to wire GoWhy in, in increasing order of force:
+## Earlier prototype
 
-| Level | How | If the agent ignores it |
-|---|---|---|
-| Tool | The agent gains `what_if`, `identify`, `explain` | It may not call them |
-| Instruction | The server's instructions say: ask before any world-changing action | It may forget |
-| **Gate** | The action tool requires the `query_id` of a matching, identifiable what-if | The action does not run, and every action that does run has an audit trail |
+Before this line of work, GoWhy was a "causal database for agents": an MCP server that estimated `what_if` effects from observational data with identification checks. That design lives on in [`DESIGN.md`](DESIGN.md), [`SPEC-DB.md`](SPEC-DB.md), [`SPEC-TRACES.md`](SPEC-TRACES.md) and the runnable [`demo/`](demo/) (`python3 demo/agent.py`). The previous README is in the git history.
 
-The demo implements the gate.
+## Acknowledgements
 
-## 🧰 The tools
-
-| Tool | Question it answers | Status |
-|---|---|---|
-| `what_if` | If I do X, what happens to Y? Effect, interval, certificate. | ✅ |
-| `identify` | Can the data I have answer this? If not, what do I log or run? | ✅ |
-| `explain` | Where did that number come from? Estimand, path, assumptions, provenance, authorized actions. | ✅ |
-| `counterfactual` | For this one episode, what if it had gone the other way? | 🚧 v0.1 |
-| `attribute` | Which component is responsible for the outcome? | 🚧 v0.1 |
-
-Every causal answer has the same shape, and there is no way to get a bare number:
-
-```jsonc
-{
-  "value": 0.030,                          // null unless the status is "identifiable"
-  "interval": [0.022, 0.037],              // confidence interval, or identification bounds
-  "certificate": {
-    "status": "identifiable",              // identifiable | partial | not
-    "strategy": "backdoor",
-    "adjustment_set": ["loyalty"],
-    "assumptions": ["..."],
-    "missing": []                          // log this, randomize that, replay this arm
-  },
-  "explain": { "estimator": "...", "n": 79796, "seed": 0, "naive_log_contrast": -0.069 }
-}
-```
-
-## 🔬 How it works
-
-```mermaid
-flowchart TD
-    agent["Agent<br/>Claude Code · Cursor · your pipeline"]
-    identify{"identify"}
-    estimate["plan and estimate"]
-    bounds["bounds and<br/>what is missing"]
-    answer["value · interval<br/>certificate · explain"]
-    gate["action gate"]
-    world(("world"))
-    store[("causal graph · evidence<br/>views · versions")]
-
-    agent -- "what_if" --> identify
-    store --- identify
-    identify -- "identifiable" --> estimate --> answer
-    identify -- "not identifiable" --> bounds --> answer
-    answer --> agent
-    agent -- "act(query_id)" --> gate --> world
-    world -. "realized outcome" .-> store
-```
-
-The pipeline below is the v0.1 design. The demo implements one slice of it: a single logged view, back-door estimation, the ID algorithm for the verdict, bounds, the to-do list, and the gate.
-
-1. **The causal graph is data.** Variables, edges, and the evidence behind each edge (experiment, log, expert, discovery) are stored and versioned. A variable can be in the graph without being in your logs; that gap is exactly what `identify` reports.
-2. **`identify` is a gate, not a step.** Back-door, then front-door, then the complete ID algorithm; then a support check on the data itself, because structural zeros are invisible to graph criteria.
-3. **A planner picks the estimator.** Experiments outrank logs; alternative valid plans are estimated as a cross-check, and disagreement is reported.
-4. **No answer without a certificate.** If the effect is not identifiable you get bounds and a to-do list, never a point estimate.
-5. **Answers authorize actions, so they are kept.** Facts are append-only, deletion is retraction, and any past answer can be replayed.
-
-The full design is in [DESIGN.md](DESIGN.md); storage semantics in [SPEC-DB.md](SPEC-DB.md); how agent traces map onto the data model in [SPEC-TRACES.md](SPEC-TRACES.md).
-
-<details>
-<summary><b>API preview for v0.1</b> (designed, not implemented yet)</summary>
-
-```python
-import gowhy
-
-db = gowhy.connect("retail.gowhy")                       # one file, in-process
-db.edge("loyalty", "discount", evidence=gowhy.Evidence("expert", "pricing policy v3"))
-db.register_view("orders_log", df, kind="observational")
-db.register_view("discount_ab", df_ab, kind="experiment", randomized=["discount"])
-
-r = db.what_if({"discount": 1}, outcomes=["retained", "refund"], where={"segment": "B"})
-r["retained"].value, r["retained"].interval, r["retained"].certificate.status
-
-db.sql("WHAT IF SET discount = 1 RETURN effect(retained), effect(refund) WHERE segment = 'B'")
-db.as_of(version=12).identify("support_call", "retained")
-```
-
-```bash
-gowhy analyze traces/ --tool retriever --treatment config.depth --mediator output.gold_hits --outcome outcome.correct
-gowhy serve --mcp
-```
-
-</details>
-
-## 🧭 What GoWhy is not
-
-- **Not an estimation library for statisticians.** DoWhy and EconML are that; they are backends.
-- **Not a causal discovery package.** Bring causal-learn, PC, GES, or an expert; GoWhy stores what they find, with provenance.
-- **Not a memory layer.** Mem0 and MemOS store what happened; GoWhy stores what causes what.
-- **Not a graph database with a causal plugin.** The causal graph is the data model, the causal question is the query, and the agent is the user.
-
-## ❓ FAQ
-
-**Where does the causal graph come from?** You bring it: domain knowledge, a discovery algorithm, past experiments, or the control flow of your agent's code (for traces, the template is structural). GoWhy does not discover graphs. It records where each edge came from and how much to trust it.
-
-**What if my graph is wrong?** Then the answer is wrong, and the certificate tells you which edges it leaned on. Two protections: realized outcomes are compared against the predicted interval after the agent acts (in the demo), and an A/B test or a handful of replays outranks the logs and serves as a cross-check (v0.1).
-
-**Does it call an LLM?** No. Identification and estimation are deterministic given a seed. LLMs are the users, not the engine.
-
-**Why not just replay everything?** Replay costs one model run per counterfactual. For "which configuration is better", logs that record tool outputs are enough. For "should the tool be called at all", they provably are not, and GoWhy tells you how few replays close the gap.
-
-**How does this relate to world models?** A learned world model predicts what follows an action from logged trajectories, so it inherits the confounding in those logs, and an ensemble cannot see that bias because every member agrees on the same wrong answer. GoWhy is the certified counterpart: each prediction says whether it is identified, unsupported, or confounded. The plan (v0.2, see [DESIGN.md §15](DESIGN.md)) is to register an external world model or simulator as a third tier of evidence, cheaper than replay and corrected with a small number of real interventions.
-
-## 🗺 Status and roadmap
-
-This is alpha software. What exists today is the demo and the design.
-
-- [x] Design doc, storage spec, trace spec
-- [x] Demo: retail world with ground truth, minimal engine, MCP server, gated action, scripted agent, tests
-- [ ] **v0.1** embedded single-file store with versions and `AS OF` · front-door and general ID estimators · query language · `gowhy analyze traces/` · `counterfactual` and `attribute` · `pip install gowhy`
-- [ ] **v0.2** logging recommendations for a whole query workload · property-graph `MATCH` · replay budgeting in the planner · OpenTelemetry and LangGraph adapters · world models and simulators as a third evidence tier, with certificates on their predictions
-- [ ] **v0.3** multi-step traces · certified skill effects · causal index plugins (FCM, FDCut, TESSERA)
-- [ ] **v1.0** mediator: register local views from tables, documents, and experiments; provenance-aware merges
-
-## 📚 Papers
-
-- *Toward a Causal Data Management Ecosystem for Decision Making and Agentic AI.* Qiu, Zhou, Pachera, Bonifati, Mauri. ACM AI Leadership Summit 2026. [arXiv:2608.07214](https://arxiv.org/abs/2608.07214). GoWhy is the reference implementation of the Causal World System described there.
-- *Replay-Free: Front-Door Identification of Tool and Retrieval Effects from Agent Logs.* Draft, 2026.
-- *Efficient What-If Queries over Large Causal Property Graphs*; *Scalable Front-Door Adjustment for Causal Models.* Under review.
-
-```bibtex
-@misc{gowhy2026,
-  title  = {GoWhy: A Causal Database for LLM Agents},
-  author = {Zhou, Yingli and others},
-  year   = {2026}
-}
-```
-
-## License
-
-Apache-2.0.
-
-Built at CNRS LIRIS within the ERC Advanced Grant GO-Y (no. 101199575), funded by the European Union. Views and opinions expressed are those of the authors only.
+The agent harnesses reproduce [AgentDebug](https://github.com/ulab-uiuc/AgentDebug); trajectories for validation come from AgentErrorBench (HF `davide221/agenterrorbench`); environments are [ALFWorld](https://github.com/alfworld/alfworld) and [WebShop](https://github.com/princeton-nlp/WebShop).

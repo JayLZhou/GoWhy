@@ -1,0 +1,23 @@
+UPDATE events SET action = hint:2:05b5e8b1 WHERE task_type LIKE 'pick_clean_then_place_in_recep' AND verb = 'go' AND revisit = 1 AND obj_match = 0 AND recep_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2:0fdab9af WHERE (task_type = 'pick_two_obj_and_place' AND obj_match = 0 AND recep_match = 0 AND verb NOT IN ('take', 'put')) SCOPE ALL
+UPDATE events SET action = hint:2:16650f29 WHERE task_type LIKE '%pick_clean_then_place_in_recep%' AND recep_match = 1 AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2:3cdc2db6 WHERE (verb LIKE 'put' OR verb LIKE 'move') AND task_type = 'pick_heat_then_place_in_recep' AND NOT (action LIKE '%heat%') SCOPE ALL
+UPDATE events SET action = hint:2:3ce67fe2 WHERE verb = 'move' AND obj_match = 1 AND recep_match = 1 AND task_type = 'pick_two_obj_and_place' AND n_invalid > 0 SCOPE ALL
+UPDATE events SET action = hint:2:48686d8e WHERE verb = 'take' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2:49d4411d WHERE (task_type LIKE 'pick_clean_then_place_in_recep') AND (verb = 'go') AND (obj_match = 0) AND (recep_match = 0) AND (action NOT LIKE '%sinkbasin%' AND action NOT LIKE '%countertop%') SCOPE ALL
+UPDATE events SET action = hint:2:8822161a WHERE (obj_match = 0) AND (recep_match = 0) AND (task_type = 'pick_and_place') SCOPE ALL
+UPDATE events SET action = hint:2:a18ab879 WHERE verb = 'go' AND NOT (action LIKE '%countertop%') AND task LIKE '%countertop%' SCOPE ALL
+UPDATE events SET action = hint:2:bd80f1ba WHERE obj_match = 0 AND task_type LIKE '%pick_heat_then_place_in_recep%' SCOPE ALL
+UPDATE events SET action = hint:2:cef16732 WHERE verb = 'take' AND task_type = 'pick_cool_then_place_in_recep' AND obj_match = 1 AND NOT (action LIKE '%cool%') SCOPE ALL
+UPDATE events SET action = hint:2:d27787fd WHERE task_type LIKE 'pick_heat%' AND verb = 'take' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2:d7f76fc6 WHERE task_type = 'look_at_obj_in_light' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2:e0ba70b7 WHERE verb = 'go' AND action LIKE '%sidetable%' AND obj_match = 0 AND task_type = 'pick_and_place' SCOPE ALL
+UPDATE events SET action = hint:2:fb389a24 WHERE task_type = 'pick_cool_then_place_in_recep' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2 WHERE repeat = 1 SCOPE ALL
+UPDATE events SET action = hint:2 WHERE verb = 'move' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2 WHERE verb = 'move' AND recep_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2 WHERE verb = 'take' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE repeat = 1 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE verb = 'move' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE verb = 'move' AND recep_match = 0 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE verb = 'take' AND obj_match = 0 SCOPE ALL

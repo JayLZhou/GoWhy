@@ -1,0 +1,5 @@
+# WebShop commit candidates, from the store diagnosis (65% of games never buy); fixed before looking at half B
+UPDATE events SET action = replan:1:commit WHERE k = 20 SCOPE FIRST
+UPDATE events SET action = replan:1:commit WHERE k = 15 OR k = 22 SCOPE ALL
+UPDATE events SET action = replan:1:nopage WHERE action = 'click[next >]' AND k >= 8 SCOPE ALL
+UPDATE events SET action = hint:2:nopage WHERE action = 'click[next >]' AND k >= 8 SCOPE ALL

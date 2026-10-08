@@ -1,0 +1,31 @@
+# proposed by qwen3-8b from 46 failed half-A games of store/fresh.db
+#   z  3.74 games  25 fail 0.68 | Using an incorrect object type instead of the required task object | feedback: Ensure the object you pick matches the task's target object type (e.g., 'mug' instead of 'cup').
+UPDATE events SET action = hint:2:bd80f1ba WHERE obj_match = 0 AND task_type LIKE '%pick_heat_then_place_in_recep%' SCOPE ALL
+#   z  3.20 games   5 fail 1.00 | Taking an object that does not match the task's target object type before heating it | feedback: Ensure the object you take matches the task's target object type (e.g., mug) before heating it.
+UPDATE events SET action = hint:2:d27787fd WHERE task_type LIKE 'pick_heat%' AND verb = 'take' AND obj_match = 0 SCOPE ALL
+#   z  3.06 games  16 fail 0.69 | The agent took a cup instead of a mug, which is required for the task. | feedback: Ensure you pick the correct object type (mug) specified in the task before heating or placing it.
+UPDATE events SET action = hint:2:48686d8e WHERE verb = 'take' AND obj_match = 0 SCOPE ALL
+#   z  2.58 games  20 fail 0.60 | The agent failed to heat the apple before placing it in the garbage can. | feedback: Ensure you heat the object before placing it in the receptacle.
+UPDATE events SET action = hint:2:3cdc2db6 WHERE (verb LIKE 'put' OR verb LIKE 'move') AND task_type = 'pick_heat_then_place_in_recep' AND NOT (action LIKE '%heat%') SCOPE ALL
+#   z  2.17 games  22 fail 0.55 | The agent failed to check the sinkbasin or target receptacle (countertop) before searching other cab | feedback: When cleaning an object and placing it in a receptacle, check the sinkbasin and the target receptacle first before searching other cabinets or drawers.
+UPDATE events SET action = hint:2:49d4411d WHERE (task_type LIKE 'pick_clean_then_place_in_recep') AND (verb = 'go') AND (obj_match = 0) AND (recep_match = 0) AND (action NOT LIKE '%sinkbasin%' AND action NOT LIKE '%countertop%') SCOPE ALL
+#   z  1.16 games  20 fail 0.45 | The agent failed to check the target receptacle (countertop) for the object (hot plate) before explo | feedback: Check the target receptacle (countertop) first for the object (hot plate) before exploring other locations.
+UPDATE events SET action = hint:2:a18ab879 WHERE verb = 'go' AND NOT (action LIKE '%countertop%') AND task LIKE '%countertop%' SCOPE ALL
+#   z  0.80 games  14 fail 0.43 | The agent failed to locate the target object (spatula) in the correct location before attempting to  | feedback: Ensure you search for the target object in likely locations (e.g., sink, countertop) before checking cabinets, as the spatula may be in a common use area rather than storage.
+UPDATE events SET action = hint:2:05b5e8b1 WHERE task_type LIKE 'pick_clean_then_place_in_recep' AND verb = 'go' AND revisit = 1 AND obj_match = 0 AND recep_match = 0 SCOPE ALL
+#   z  0.20 games  20 fail 0.35 | Failing to locate the target object (pan) before attempting to place it | feedback: Ensure you locate the target object (pan) before attempting to place it in the receptacle.
+UPDATE events SET action = hint:2:fb389a24 WHERE task_type = 'pick_cool_then_place_in_recep' AND obj_match = 0 SCOPE ALL
+#   z  0.20 games  20 fail 0.35 | Agent failed to locate the spatula before attempting to place it in a drawer. | feedback: Ensure you first locate and pick up the target object before attempting to place it in the receptacle.
+UPDATE events SET action = hint:2:16650f29 WHERE task_type LIKE '%pick_clean_then_place_in_recep%' AND recep_match = 1 AND obj_match = 0 SCOPE ALL
+#   z -0.58 games  12 fail 0.25 | Agent went to the target receptacle without first taking the required object. | feedback: Before placing an object, ensure you have picked it up first.
+UPDATE events SET action = hint:2:e0ba70b7 WHERE verb = 'go' AND action LIKE '%sidetable%' AND obj_match = 0 AND task_type = 'pick_and_place' SCOPE ALL
+#   z -1.04 games  11 fail 0.18 | The agent failed to check for the target object (book) in the illuminated area (under the desklamp)  | feedback: Ensure you look for the target object in the illuminated area after turning on the light.
+UPDATE events SET action = hint:2:d7f76fc6 WHERE task_type = 'look_at_obj_in_light' AND obj_match = 0 SCOPE ALL
+#   z -1.20 games  16 fail 0.19 | Taking the object without first cooling it for a task that requires cooling | feedback: For tasks requiring cooling, ensure the object is cooled before picking it up.
+UPDATE events SET action = hint:2:cef16732 WHERE verb = 'take' AND task_type = 'pick_cool_then_place_in_recep' AND obj_match = 1 AND NOT (action LIKE '%cool%') SCOPE ALL
+#   z -1.79 games  25 fail 0.16 | Failure to check the target receptacle for the required objects before attempting to place them | feedback: Always verify the target receptacle and search all potential locations for the required objects before attempting to place them.
+UPDATE events SET action = hint:2:0fdab9af WHERE (task_type = 'pick_two_obj_and_place' AND obj_match = 0 AND recep_match = 0 AND verb NOT IN ('take', 'put')) SCOPE ALL
+#   z -1.93 games  13 fail 0.08 | Failing to pick up both required objects before placing them | feedback: Ensure both target objects are picked up before attempting to place them.
+UPDATE events SET action = hint:2:3ce67fe2 WHERE verb = 'move' AND obj_match = 1 AND recep_match = 1 AND task_type = 'pick_two_obj_and_place' AND n_invalid > 0 SCOPE ALL
+#   z -2.19 games  29 fail 0.14 | Failing to locate the target object (pen) or receptacle (shelf) before attempting to place it. | feedback: Ensure you check the target object and receptacle locations before attempting to place the object.
+UPDATE events SET action = hint:2:8822161a WHERE (obj_match = 0) AND (recep_match = 0) AND (task_type = 'pick_and_place') SCOPE ALL

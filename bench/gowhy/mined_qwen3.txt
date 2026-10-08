@@ -1,0 +1,16 @@
+# mined on half A: 143 games, failure rate 0.24
+#   z  3.40  games  12  fail 0.67  repeat = 1
+#   z  2.50  games   8  fail 0.62  verb = 'take' AND obj_match = 0
+#   z  1.66  games  26  fail 0.38  valid = 0
+#   z  1.62  games  11  fail 0.45  verb = 'move' AND recep_match = 0
+#   z  1.44  games  41  fail 0.34  verb = 'examine' AND obj_match = 0
+#   z -1.19  games  11  fail 0.09  verb = 'use' AND obj_match = 0
+#   z -2.49  games  80  fail 0.12  revisit = 1
+UPDATE events SET action = reject:3 WHERE repeat = 1 SCOPE ALL
+UPDATE events SET action = hint:2 WHERE repeat = 1 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE verb = 'take' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2 WHERE verb = 'take' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE valid = 0 SCOPE ALL
+UPDATE events SET action = hint:2 WHERE valid = 0 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE verb = 'move' AND recep_match = 0 SCOPE ALL
+UPDATE events SET action = hint:2 WHERE verb = 'move' AND recep_match = 0 SCOPE ALL

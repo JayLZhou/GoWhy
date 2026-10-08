@@ -1,0 +1,7 @@
+# replan candidates, fixed before looking at half B
+UPDATE events SET action = replan:2 WHERE verb = 'take' AND obj_match = 0 SCOPE ALL
+UPDATE events SET action = replan:2 WHERE verb = 'move' AND recep_match = 0 SCOPE ALL
+UPDATE events SET action = replan:2 WHERE valid = 0 SCOPE ALL
+UPDATE events SET action = replan:2 WHERE (verb = 'take' AND obj_match = 0) OR (verb = 'move' AND recep_match = 0) SCOPE ALL
+UPDATE events SET action = replan:1 WHERE k = 10 OR k = 20 SCOPE ALL
+UPDATE events SET action = replan:1 WHERE k >= 8 AND revisit = 1 SCOPE ALL

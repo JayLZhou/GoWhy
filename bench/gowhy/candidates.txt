@@ -1,0 +1,10 @@
+# HOWTO candidates: one change per line. Run with
+#   python gowhy/query.py "HOWTO gowhy/candidates.txt WITH n = 4 CERTIFY n = 8"
+UPDATE events SET action = reject:3 WHERE valid = 0 SCOPE ALL
+UPDATE events SET action = reject:1 WHERE valid = 0 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE valid = 0 SCOPE FIRST
+UPDATE events SET action = reject:3 WHERE repeat = 1 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE revisit = 1 SCOPE ALL
+UPDATE events SET action = reject:3 WHERE valid = 0 OR repeat = 1 SCOPE ALL
+UPDATE events SET action = unquote WHERE quoted = 1 SCOPE ALL
+UPDATE events SET action = set:look WHERE n_invalid >= 3 AND valid = 0 SCOPE FIRST
