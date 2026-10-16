@@ -10,6 +10,14 @@
 Ask *"what if the agent had done X?"* and *"what change would make it succeed more?"*,<br>
 and get answers that are unbiased, certified, and far cheaper than re-running the benchmark.
 
+> **Status (2026-10-16).** The project is being extended from single-agent what-if / how-to queries to
+> *certified why and how-to queries over replayable agent executions*, including multi-agent failure
+> localization on AgentsNet (the coordination tasks of MAFBench). Working title: *GoWhy: Certified Why and
+> How-To Queries over Replayable Agent Executions*. Start with [`bench/README_HANDOFF.md`](bench/README_HANDOFF.md)
+> (how to run everything, where data and results live) and [`bench/PLAN_MERGE.md`](bench/PLAN_MERGE.md)
+> (experiment plan with pass criteria); `bench/PLAN.md` is the full running log. The self-assessment in older
+> versions of `bench/PLAN.md` was too high; the current honest estimate is in that file.
+
 [![status](https://img.shields.io/badge/status-research%20prototype-orange)](#status-and-roadmap)
 [![python](https://img.shields.io/badge/python-3.10-3776ab)](#quickstart)
 [![envs](https://img.shields.io/badge/envs-ALFWorld%20%C2%B7%20WebShop-informational)](#results)

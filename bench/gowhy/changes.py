@@ -22,6 +22,10 @@ Effects
   reparse         a harness fix: when the strict parser yields an inadmissible action, read
                   the text after <action> leniently (no closing tag needed, quotes and
                   "I choose to" phrasing removed) and map it to the closest admissible action
+  guide:1:ID      a prompt change (the search space of prompt optimizers): from the first
+                  matching step on, every prompt ends with the guidance text ID; the matching
+                  step's reply is redrawn under the new prompt. With WHERE k >= 0 and no
+                  logged prefix this is a full redeployment with a new instruction.
   replan:N[:ID]   stronger feedback and retry: the checker also restates the task, the
                   actions taken so far and the places already visited, and asks the agent
                   to name the unfinished part of the task before choosing again
@@ -47,7 +51,7 @@ _msgs = None
 
 def message(mid: str) -> str:
     global _msgs
-    if _msgs is None:
+    if _msgs is None or mid not in _msgs:          # reload: optimizers add messages while running
         _msgs = json.load(open(_MSGS_PATH)) if os.path.exists(_MSGS_PATH) else {}
     return _msgs[mid]
 _local = threading.local()
@@ -76,11 +80,11 @@ class Change:
             raise ValueError(f"cannot parse change: {text!r}")
         eff = m.group("effect")
         name, _, arg = eff.partition(":")
-        if name not in ("reject", "swap", "set", "unquote", "hint", "replan", "reparse"):
+        if name not in ("reject", "swap", "set", "unquote", "hint", "replan", "reparse", "guide"):
             raise ValueError(f"unknown effect {name!r}")
         ch = cls(" ".join(text.split()), name, arg, m.group("pred").strip(), m.group("scope").upper())
         ch.matches({c: (0 if c not in ("action", "obs", "task", "verb", "task_type") else "") for c in _COLS})
-        if name in ("hint", "replan") and ":" in arg:
+        if name in ("hint", "replan", "guide") and ":" in arg:
             message(arg.split(":", 1)[1])  # must exist
         return ch
 
@@ -109,6 +113,26 @@ class Change:
 
     def _qualified(self) -> str:
         return self.pred
+
+
+GUIDE = "\n\nAdditional guidance for this task: {msg}"
+
+
+def guide_text(ch: "Change") -> str:
+    return GUIDE.format(msg=message(ch.arg.split(":", 1)[1]))
+
+
+PATCH_SEP = " ;; "
+
+
+def parse_patch(text: str) -> list:
+    """A patch: changes applied in order at every step, written C1 ;; C2 ;; ... (Counterfactual Store
+    Iteration). Each later change sees the reply produced by the earlier ones."""
+    return [Change.parse(t) for t in text.split(";;") if t.strip()]
+
+
+def patch_text(changes: list) -> str:
+    return PATCH_SEP.join(c.text for c in changes)
 
 
 HINT = ("Feedback from a checker: your chosen action '{action}' looks unhelpful here "

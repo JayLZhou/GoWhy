@@ -103,6 +103,8 @@ TASK_TYPES = [
 def task_type_of(gamefile: str) -> str:
     if gamefile.startswith("webshop:"):
         return "webshop"
+    if gamefile.startswith("sciworld:"):
+        return "sciworld:" + gamefile.split(":")[1]
     for t in TASK_TYPES:
         if t in gamefile:
             return t
@@ -265,6 +267,9 @@ def start_episode(gamefile: str):
     if gamefile.startswith("webshop:"):
         import webshop
         return webshop.Episode.start(gamefile)
+    if gamefile.startswith("sciworld:"):
+        import sciworld
+        return sciworld.Episode.start(gamefile)
     return Episode.start(gamefile)
 
 
@@ -310,6 +315,9 @@ class Trace:
         if self.gamefile.startswith("webshop:"):
             import webshop
             return [webshop.project(r)[0] for r in self.raws]
+        if self.gamefile.startswith("sciworld:"):
+            import sciworld
+            return [sciworld.project(r)[0] for r in self.raws]
         return [project(r)[0] for r in self.raws]
 
 

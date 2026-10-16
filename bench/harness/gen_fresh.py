@@ -53,7 +53,7 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--workers", type=int, default=64)
     ap.add_argument("--out", default=None)
-    ap.add_argument("--env", choices=["alfworld", "webshop"], default="alfworld")
+    ap.add_argument("--env", choices=["alfworld", "webshop", "sciworld"], default="alfworld")
     a = ap.parse_args()
 
     out = a.out or os.path.join(aeb.ROOT, "data", "fresh", f"{a.model}.jsonl")
@@ -68,6 +68,9 @@ def main():
     if a.env == "webshop":
         import webshop
         games, used = webshop.goals("train"), set()
+    elif a.env == "sciworld":
+        import sciworld
+        games, used = sciworld.games("train", per_task=10), set()
     else:
         games = aeb.game_files("train")
         try:
@@ -87,7 +90,7 @@ def main():
     t0, won, n = time.time(), 0, 0
     import multiprocessing as mp
     # WebShop runs Lucene in a JVM (pyjnius); a JVM does not survive fork, so use spawn
-    ctx = mp.get_context("spawn") if a.env == "webshop" else None
+    ctx = mp.get_context("spawn") if a.env in ("webshop", "sciworld") else None
     with ProcessPoolExecutor(a.workers, mp_context=ctx) as ex, open(out, "a") as fo:
         futs = [ex.submit(play, tid, a.model, g, a.served, a.ports) for tid, g in jobs]
         for fu in as_completed(futs):

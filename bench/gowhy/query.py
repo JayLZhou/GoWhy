@@ -28,7 +28,7 @@ from engine import Engine  # noqa: E402
 
 ROOT = os.environ.get("GOWHY_ROOT", "/data2/yujia/Yingli/gowhy")
 BASE_OF = {"fresh.db": "qwen3-8b", "fresh_q25.db": "qwen2.5-7b", "ws_q3.db": "qwen3-8b",
-           "fresh_llama.db": "llama-3.1-8b"}
+           "fresh_llama.db": "llama-3.1-8b", "sw_q25.db": "qwen2.5-7b"}
 
 _Q = re.compile(r"^\s*(?P<kind>WHATIF|HOWTO)\s+(?P<body>.+?)(?:\s+GROUP\s+BY\s+(?P<group>\w+))?"
                 r"\s+WITH\s+n\s*=\s*(?P<n>\d+)(?:\s+DEPLOY\s+m\s*=\s*(?P<m>\d+))?"

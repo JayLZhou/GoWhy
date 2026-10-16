@@ -27,9 +27,12 @@ class Policy:
     def __init__(self, name: str, temperature: float = 0.7, ports=None, timeout: float = 600):
         from openai import OpenAI
 
+        # "<model>-nothink": same served model with Qwen3 thinking disabled (a cheap proxy policy)
+        self.nothink = name.endswith("-nothink")
+        self.served = name[:-len("-nothink")] if self.nothink else name
         self.name = name
         self.temperature = temperature
-        ports = ports or SERVERS[name]
+        ports = ports or SERVERS.get(name) or SERVERS[self.served]
         self.clients = [OpenAI(base_url=f"http://{HOST}:{p}/v1", api_key="EMPTY", timeout=timeout,
                                max_retries=0) for p in ports]
         # random starting replica per process: with a fixed start, every worker's first call
@@ -52,11 +55,38 @@ class Policy:
         same seed at the same (game, rep, step) are coupled (common random numbers)."""
         delay = 0.5
         extra = {} if seed is None else {"seed": int(seed)}
+        if self.nothink:
+            extra["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
         for attempt in range(3):
             try:
                 r = self._client().chat.completions.create(
-                    model=self.name, messages=[{"role": "user", "content": prompt}],
+                    model=self.served, messages=[{"role": "user", "content": prompt}],
                     temperature=self.temperature, n=1, **extra)
+                with self._lock:
+                    self.calls += 1
+                    if r.usage:
+                        self.prompt_tokens += r.usage.prompt_tokens
+                        self.completion_tokens += r.usage.completion_tokens
+                return (r.choices[0].message.content or "").strip()
+            except Exception:
+                if attempt == 2:
+                    with self._lock:
+                        self.failures += 1
+                    return "None"
+                time.sleep(delay)
+                delay *= 2
+
+    def chat(self, messages: list, seed: int | None = None) -> str:
+        """Multi-turn call (system/user/assistant messages), for stateful agents such as
+        AgentsNet's; same sampling settings and retry policy as __call__."""
+        delay = 0.5
+        extra = {} if seed is None else {"seed": int(seed)}
+        if self.nothink:
+            extra["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+        for attempt in range(3):
+            try:
+                r = self._client().chat.completions.create(
+                    model=self.served, messages=messages, temperature=self.temperature, n=1, **extra)
                 with self._lock:
                     self.calls += 1
                     if r.usage:

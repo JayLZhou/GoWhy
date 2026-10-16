@@ -34,7 +34,7 @@ NULL = "UPDATE events SET action = reject:1 WHERE k < 0 SCOPE ALL"
 
 def trace_of(gamefile: str, split: str) -> dict:
     obj, recep = store.game_parts(gamefile)
-    if gamefile.startswith("webshop:"):
+    if gamefile.startswith(("webshop:", "sciworld:")):
         tid = split + "/" + gamefile
     else:
         tid = split + "/" + gamefile.split("/json_2.1.1/")[1].split("/")[1] + "/" + gamefile.split("/")[-2]
@@ -67,6 +67,7 @@ def main():
     ap.add_argument("--workers", type=int, default=160)
     ap.add_argument("--out", default=None)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--per-task", type=int, default=3, help="ScienceWorld: test variations per task")
     a = ap.parse_args()
     out = a.out or os.path.join(aeb.ROOT, "store", f"ab_{a.served}.jsonl")
 
@@ -74,6 +75,9 @@ def main():
         if split.startswith("webshop_"):  # webshop_test or webshop_train
             import webshop
             return webshop.goals(split.split("_", 1)[1])
+        if split.startswith("sciworld_"):  # sciworld_test: 3 test variations per task
+            import sciworld
+            return sciworld.games(split.split("_", 1)[1], per_task=a.per_task, seed=1)
         return aeb.game_files(split)
 
     traces = [trace_of(g, s) for s in a.splits.split(",") for g in games(s)]
@@ -90,7 +94,7 @@ def main():
 
     t0 = time.time()
     import multiprocessing as mp
-    ctx = mp.get_context("spawn") if any(t["gamefile"].startswith("webshop:") for t in traces) else None
+    ctx = mp.get_context("spawn") if any(t["gamefile"].startswith(("webshop:", "sciworld:")) for t in traces) else None
     with ProcessPoolExecutor(a.workers, mp_context=ctx) as ex, open(out, "a") as fo:
         futs = [ex.submit(run, arm, arms[arm], a.served, t, r) for arm, t, r in jobs]
         for i, fu in enumerate(as_completed(futs), 1):

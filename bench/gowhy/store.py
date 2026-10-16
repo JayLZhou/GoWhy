@@ -40,6 +40,7 @@ SOURCES = {
     "aeb": (None, "store/gowhy.db"),
     "ws_q3": ("data/fresh/Qwen3-8B-ws.jsonl", "store/ws_q3.db"),
     "fresh_llama": ("data/fresh/Llama-3.1-8B-fresh.jsonl", "store/fresh_llama.db"),
+    "sw_q25": ("data/fresh/Qwen2.5-7B-sw.jsonl", "store/sw_q25.db"),
 }
 
 ATTRS = ["k", "verb", "valid", "fmt_valid", "quoted", "revisit", "repeat", "obj_match", "recep_match", "n_invalid"]
@@ -62,7 +63,7 @@ CREATE INDEX IF NOT EXISTS runs_key ON runs(change, tid, rep);
 
 def game_parts(gamefile: str):
     """pick_and_place_simple-Newspaper-None-Sofa-224 -> ('newspaper', 'sofa'); ('', '') for WebShop."""
-    if gamefile.startswith("webshop:"):
+    if gamefile.startswith("webshop:") or gamefile.startswith("sciworld:"):
         return "", ""
     d = gamefile.split("/json_2.1.1/")[-1].split("/")[1]
     p = d.split("-")
@@ -103,7 +104,8 @@ def connect(path: str) -> sqlite3.Connection:
     con.executescript(SCHEMA)
     # columns added after the first stores were built
     for table, col, typ in [("events", "recep_match", "INTEGER"), ("events", "obs", "TEXT"),
-                            ("traces", "task", "TEXT"), ("traces", "score", "REAL"), ("runs", "score", "REAL")]:
+                            ("traces", "task", "TEXT"), ("traces", "score", "REAL"), ("runs", "score", "REAL"),
+                            ("runs", "steps", "BLOB")]:
         if col not in {r[1] for r in con.execute(f"PRAGMA table_info({table})")}:
             try:
                 con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
@@ -153,7 +155,7 @@ def build(name: str, workers: int = 32):
     logged_won = {tr.tid: tr.won for tr in traces}
     n_ev = 0
     import multiprocessing as mp
-    ctx = mp.get_context("spawn") if any(t.gamefile.startswith("webshop:") for t in traces) else None
+    ctx = mp.get_context("spawn") if any(t.gamefile.startswith(("webshop:", "sciworld:")) for t in traces) else None
     with ProcessPoolExecutor(workers, mp_context=ctx) as ex:
         for tid, rows, won, task, score in ex.map(trace_events, traces, chunksize=4):
             con.executemany("INSERT OR REPLACE INTO events(tid,k,action,raw,verb,valid,fmt_valid,quoted,revisit,"

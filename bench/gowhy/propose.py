@@ -106,11 +106,13 @@ def main():
     ap.add_argument("--keep", type=int, default=30)
     ap.add_argument("--min-support", type=int, default=5)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--half", default="A", help="read failed games of this half ('' = all games in the store)")
+    ap.add_argument("--replan", action="store_true", help="also emit replan:2:ID variants of each rule")
     a = ap.parse_args()
 
     con = sqlite3.connect(a.db)
     tr = {t: (w, tt, task) for t, w, tt, task in con.execute("SELECT tid, won, task_type, task FROM traces")}
-    A = {t for t in tr if half_of(t) == "A"}
+    A = {t for t in tr if not a.half or half_of(t) == a.half}
     failed = sorted(t for t in A if not tr[t][0])
     base_fail = len(failed) / len(A)
     pol = llm.Policy(a.proposer, temperature=0.7)
@@ -170,12 +172,14 @@ def main():
 
     msgs = json.load(open(_MSGS_PATH)) if os.path.exists(_MSGS_PATH) else {}
     with open(a.out, "w") as fo:
-        fo.write(f"# proposed by {a.proposer} from {len(failed)} failed half-A games of {a.db}\n")
+        fo.write(f"# proposed by {a.proposer} from {len(failed)} failed games (half {a.half or 'all'}) of {a.db}\n")
         for hit, z, pred, fb, n, f, mis in kept:
             mid = hashlib.sha1(fb.encode()).hexdigest()[:8]
             msgs[mid] = fb
             fo.write(f"#   z {z:5.2f} games {n:3d} fail {f:.2f} | {mis[:100]} | feedback: {fb}\n")
             fo.write(f"UPDATE events SET action = hint:2:{mid} WHERE {pred} SCOPE ALL\n")
+            if a.replan:
+                fo.write(f"UPDATE events SET action = replan:2:{mid} WHERE {pred} SCOPE ALL\n")
     json.dump(msgs, open(_MSGS_PATH, "w"), indent=1)
     print(f"wrote {len(kept)} candidates to {a.out}", file=sys.stderr)
 
